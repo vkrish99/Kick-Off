@@ -1,0 +1,12 @@
+
+app/__pycache__/
+__pycache__/
+.env
+.venv/
+env/
+venv/
+*.pyc
+
+# Raw datasets — too large for git, download separately via scripts/load_datasets.py
+kaggle_football/
+football-datasets-main/

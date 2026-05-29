@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PitchMaster AI Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- Top Navigation -->
+    <header class="navbar">
+        <div class="logo">
+            <span class="icon">⚽</span>
+            <span class="brand">PITCHMASTER <span class="accent">AI</span></span>
+        </div>
+        <div class="match-center">
+            <div class="team team-left">MAN CITY</div>
+            <div class="score">0 <span class="divider">-</span> 0</div>
+            <div class="team team-right">ARSENAL</div>
+            <div class="match-time" id="match-time">65:00</div>
+        </div>
+        <div class="nav-actions">
+            <button id="simulate-btn" class="btn btn-outline" title="Generates new positions and syncs them">
+                ▶ Simulate Play
+            </button>
+            <a href="/docs" target="_blank" class="btn btn-swagger">
+                Swagger API ↗
+            </a>
+        </div>
+    </header>
+
+    <!-- Main Dashboard Grid -->
+    <main class="dashboard-grid">
+        <!-- Live Pitch View -->
+        <section class="panel pitch-panel">
+            <div class="panel-header">
+                <h2>Live Telemetry View</h2>
+                <div class="status-indicator">
+                    <span class="pulse"></span> Live
+                </div>
+            </div>
+            <div class="pitch-wrapper">
+                <div class="pitch">
+                    <div class="pitch-lines">
+                        <div class="half left-half">
+                            <div class="penalty-box">
+                                <div class="six-yard-box"></div>
+                                <div class="penalty-spot"></div>
+                            </div>
+                            <div class="penalty-arc"></div>
+                        </div>
+                        <div class="half right-half">
+                            <div class="penalty-box">
+                                <div class="six-yard-box"></div>
+                                <div class="penalty-spot"></div>
+                            </div>
+                            <div class="penalty-arc"></div>
+                        </div>
+                        <div class="center-line"></div>
+                        <div class="center-circle">
+                            <div class="center-spot"></div>
+                        </div>
+                    </div>
+                    <!-- Player nodes will be injected here by JS -->
+                    <div id="players-layer"></div>
+                </div>
+            </div>
+            
+            <div class="telemetry-stats">
+                 <div class="stat-card">
+                     <div class="stat-title">Avg Distance</div>
+                     <div class="stat-value" id="stat-dist">1.1 km</div>
+                 </div>
+                 <div class="stat-card">
+                     <div class="stat-title">Max Speed</div>
+                     <div class="stat-value" id="stat-speed">32.4 km/h</div>
+                 </div>
+                 <div class="stat-card warning" id="fatigue-warning">
+                     <div class="stat-title">Critical Fatigue</div>
+                     <div class="stat-value" id="stat-fatigue">0 Players > 0.7</div>
+                 </div>
+            </div>
+        </section>
+
+        <!-- AI Agent Analysis View -->
+        <section class="panel agent-panel">
+            <div class="panel-header">
+                <h2>AI Orchestrator</h2>
+                <div class="active-route" id="active-route">Awaiting Query...</div>
+            </div>
+            
+            <div class="chat-container" id="chat-container">
+                <div class="message system">
+                    <div class="avatar">🤖</div>
+                    <div class="content">
+                        <strong>Orchestrator Online</strong>
+                        <p>I am tracking 11 active players on the pitch. You can ask me tactical questions, request formation advice based on live fatigue levels, or lookup historical data.</p>
+                        <div class="suggested-queries">
+                            <button class="suggestion">Which players are showing high fatigue?</button>
+                            <button class="suggestion">What formation should we switch to?</button>
+                            <button class="suggestion">Tell me about Erling Haaland's recent record.</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-container">
+                <input type="text" id="query-input" placeholder="Ask AI (e.g., 'Who should I substitute?')" autocomplete="off" />
+                <button id="send-btn" class="btn btn-primary">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" class="icon-send">
+                        <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
