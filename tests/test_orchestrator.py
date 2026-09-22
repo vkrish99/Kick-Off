@@ -134,7 +134,9 @@ class TestOrchestratorRouting:
 
         assert route == "RAG"
         assert insight == "RAG answer about Haaland"
-        mock_rag.retrieve_context.assert_called_once_with("What are Haaland's key stats?")
+        mock_rag.retrieve_context.assert_called_once_with(
+            "What are Haaland's key stats?", filters=None
+        )
 
     async def test_missing_api_key_raises_503_from_router(self, orchestrator):
         """When GROQ_API_KEY is absent, _classify_route should propagate 503."""

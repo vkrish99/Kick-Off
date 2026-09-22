@@ -26,18 +26,24 @@ class PineconeRetriever(BaseRetriever):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
     vector_store_service: object  # VectorStoreService instance
+    k: int = 3
+    filter: Optional[dict] = None  # Pinecone metadata filter, e.g. {"position": "Striker"}
 
     def _get_relevant_documents(
         self,
         query: str,
         *,
         run_manager: CallbackManagerForRetrieverRun,
-        k: int = 3,
     ) -> List[Document]:
         svc = self.vector_store_service  # type: VectorStoreService
         embedding = svc._embed(query)
         index = svc._get_index()
-        results = index.query(vector=embedding, top_k=k, include_metadata=True)
+        results = index.query(
+            vector=embedding,
+            top_k=self.k,
+            include_metadata=True,
+            filter=self.filter,
+        )
         docs = []
         for match in results.get("matches", []):
             content = match.get("metadata", {}).get("content", "")
@@ -147,7 +153,8 @@ class VectorStoreService:
         search_kwargs = search_kwargs or {}
         return PineconeRetriever(
             vector_store_service=self,
-            **search_kwargs,
+            k=search_kwargs.get("k", settings.RAG_RETRIEVAL_K),
+            filter=search_kwargs.get("filter"),
         )
 
 

@@ -75,6 +75,7 @@ class Orchestrator:
         query: str,
         telemetry_context: list = None,
         news_context: str = None,
+        filters: dict = None,
     ) -> tuple[str, str]:
         """
         Returns (insight, route_used).
@@ -113,7 +114,7 @@ class Orchestrator:
             )
 
         if "RAG" in route:
-            docs = await rag_service.retrieve_context(query)
+            docs = await rag_service.retrieve_context(query, filters=filters)
             context_str = "\n".join(d.page_content for d in docs)
             llm = ChatGroq(
                 model=settings.GROQ_MODEL,

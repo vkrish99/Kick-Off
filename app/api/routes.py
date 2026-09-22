@@ -119,6 +119,7 @@ async def analyze_query(request: Request, payload: AnalysisRequest):
             query=payload.query,
             telemetry_context=telemetry_context,
             news_context=payload.news_context,
+            filters=payload.filters,
         )
         return AnalysisResponse(insight=insight, route_used=route)
     except HTTPException:

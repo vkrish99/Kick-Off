@@ -7,6 +7,9 @@ from unittest.mock import MagicMock, patch
 from langchain_core.documents import Document
 from app.services.rag import RAGService
 from app.models.schemas import PlayerProfile
+from app.core.config import get_settings
+
+rag_module_settings = get_settings()
 
 
 @pytest.fixture
@@ -128,4 +131,28 @@ class TestRAGServiceRetrieve:
 
         await rag.retrieve_context("query", k=5)
 
-        mock_vs.as_retriever.assert_called_once()
+        mock_vs.as_retriever.assert_called_once_with(search_kwargs={"k": 5})
+
+    @patch("app.services.rag.vector_store_service")
+    async def test_retrieve_context_forwards_metadata_filter(self, mock_vs, rag):
+        mock_retriever = MagicMock()
+        mock_retriever.invoke.return_value = []
+        mock_vs.as_retriever.return_value = mock_retriever
+
+        await rag.retrieve_context("query", k=5, filters={"position": "Striker"})
+
+        mock_vs.as_retriever.assert_called_once_with(
+            search_kwargs={"k": 5, "filter": {"position": "Striker"}}
+        )
+
+    @patch("app.services.rag.vector_store_service")
+    async def test_retrieve_context_defaults_k_from_settings(self, mock_vs, rag):
+        mock_retriever = MagicMock()
+        mock_retriever.invoke.return_value = []
+        mock_vs.as_retriever.return_value = mock_retriever
+
+        await rag.retrieve_context("query")
+
+        mock_vs.as_retriever.assert_called_once_with(
+            search_kwargs={"k": rag_module_settings.RAG_RETRIEVAL_K}
+        )

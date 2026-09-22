@@ -6,7 +6,7 @@ PitchMaster AI is a **Distributed Football Intelligence System** designed to pro
 
 - **Real-time Telemetry Ingestion**: High-concurrency ingestion of player metrics via FastAPI and Redis.
 - **Multi-Agent Orchestration**: Specialized agents for Tactical Analysis and Sentiment Analysis using LangChain.
-- **RAG Pipeline**: Retrieval-Augmented Generation using Pinecone to access 10,000+ player profiles.
+- **RAG Pipeline**: Retrieval-Augmented Generation over Pinecone, with metadata-filtered top-k retrieval. Sourced from a 34K-player Kaggle/Transfermarkt dataset; `scripts/load_datasets.py` ingests a configurable slice (default 200, `--limit` to scale up).
 - **Distributed Architecture**: Built with Python, FastAPI, Redis, and scalability in mind.
 
 ## Architecture
