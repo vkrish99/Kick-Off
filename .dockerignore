@@ -1,0 +1,15 @@
+.git
+.gitignore
+.idea
+.pytest_cache
+__pycache__
+**/__pycache__
+*.pyc
+.venv
+venv
+env
+.env
+tests/
+README.md
+kaggle_football/
+football-datasets-main/

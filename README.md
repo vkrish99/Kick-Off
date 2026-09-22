@@ -24,19 +24,16 @@ PitchMaster AI is a **Distributed Football Intelligence System** designed to pro
    cp .env.example .env
    ```
 
-2. **Run Infrastructure**:
-   Start Redis using Docker Compose.
+2. **Run everything with Docker Compose** (app + Redis + InfluxDB):
    ```bash
-   docker-compose up -d
+   docker-compose up --build
    ```
+   The API is then live at `http://localhost:8000`.
 
-3. **Install Dependencies**:
+   Or run the app locally instead, against Dockerized infrastructure:
    ```bash
+   docker-compose up -d redis influxdb
    pip install -r requirements.txt
-   ```
-
-4. **Run Application**:
-   ```bash
    uvicorn app.main:app --reload
    ```
 
