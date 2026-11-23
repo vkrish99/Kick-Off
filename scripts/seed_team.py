@@ -16,7 +16,6 @@ python -m pip install httpx is already in requirements.txt
 
 import argparse
 import asyncio
-import json
 import random
 import sys
 from datetime import datetime, timezone
@@ -24,9 +23,17 @@ from datetime import datetime, timezone
 # Fix Windows console encoding for emoji/unicode
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-import httpx
+import httpx  # noqa: E402
 
-BASE_URL = "http://localhost:8000"
+import os  # noqa: E402
+
+from dotenv import load_dotenv  # noqa: E402
+
+load_dotenv()
+
+# Point at a deployed server with PITCHMASTER_URL; API_KEY (from .env) is sent on writes.
+BASE_URL = os.environ.get("PITCHMASTER_URL", "http://localhost:8000").rstrip("/")
+HEADERS = {"X-API-Key": os.environ["API_KEY"]} if os.environ.get("API_KEY") else {}
 
 # ---------------------------------------------------------------------------
 # Manchester City 2024/25 Squad — Rich Player Profiles
@@ -604,8 +611,8 @@ async def seed_profiles(client: httpx.AsyncClient, team: str) -> bool:
             print(f"  ✅  Ingested {data['count']} profiles → Pinecone vector store")
             return True
         elif r.status_code == 503:
-            print(f"  ⚠️   Pinecone/Groq keys not configured — skipping profile ingestion")
-            print(f"       Set GROQ_API_KEY + PINECONE_API_KEY in .env to enable RAG.")
+            print("  ⚠️   Pinecone/Groq keys not configured — skipping profile ingestion")
+            print("       Set GROQ_API_KEY + PINECONE_API_KEY in .env to enable RAG.")
             return False
         else:
             print(f"  ❌  Failed [{r.status_code}]: {r.text[:300]}")
@@ -631,7 +638,7 @@ async def seed_telemetry(client: httpx.AsyncClient, minute: int = 65) -> None:
     print(f"    ... ({len(SQUAD)-8} more players)")
 
     if high_fatigue:
-        print(f"\n  ⚠️   Players with high fatigue (>0.6):")
+        print("\n  ⚠️   Players with high fatigue (>0.6):")
         for t in high_fatigue:
             player_name = next(p["name"] for p in SQUAD if p["player_id"] == t["player_id"])
             print(f"    🔴 {player_name:<22} fatigue={t['fatigue_index']:.2f}")
@@ -666,7 +673,7 @@ async def run_analysis(client: httpx.AsyncClient, query: str, minute: int = 65) 
             print(f"  {data['insight']}")
             print(f"{'-'*60}")
         elif r.status_code == 503:
-            print(f"  ⚠️   Groq API key not configured — set GROQ_API_KEY in .env")
+            print("  ⚠️   Groq API key not configured — set GROQ_API_KEY in .env")
         else:
             print(f"  ❌  [{r.status_code}]: {r.text[:300]}")
     except Exception as e:
@@ -675,7 +682,7 @@ async def run_analysis(client: httpx.AsyncClient, query: str, minute: int = 65) 
 
 async def demo_analysis(client: httpx.AsyncClient) -> None:
     print(f"\n{'='*60}")
-    print(f"  🧠  Running Demo Analysis Queries...")
+    print("  🧠  Running Demo Analysis Queries...")
     print(f"{'='*60}")
 
     queries = [
@@ -700,12 +707,12 @@ async def check_queue(client: httpx.AsyncClient) -> None:
 
 async def main(no_ai: bool, team: str) -> None:
     print(f"\n{'='*60}")
-    print(f"  ⚽  PitchMaster AI — Manchester City Team Seeder")
+    print("  ⚽  PitchMaster AI — Manchester City Team Seeder")
     print(f"  Team: {team}")
     print(f"  Players: {len(SQUAD)}")
     print(f"{'='*60}")
 
-    async with httpx.AsyncClient(base_url=BASE_URL) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=HEADERS) as client:
         # 1. Health check
         try:
             r = await client.get("/health", timeout=5)

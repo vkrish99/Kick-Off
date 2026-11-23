@@ -2,6 +2,7 @@
 PitchMaster AI — Application Entry Point
 """
 import asyncio
+import logging
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -9,7 +10,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from slowapi.errors import RateLimitExceeded
@@ -21,19 +22,27 @@ from app.core.config import get_settings
 from app.core.logging_config import configure_logging
 from app.core.metrics import REQUEST_COUNT
 from app.services.telemetry_worker import telemetry_worker
+from app.services.vector_store import vector_store_service
 
 settings = get_settings()
 
 # Configure logging (JSON in production, human-readable in dev)
 configure_logging(json_logs=settings.LOG_JSON)
 
-import logging
 logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
 # Lifespan — replaces deprecated @app.on_event("startup/shutdown")
 # ---------------------------------------------------------------------------
+async def _warm_up_rag() -> None:
+    try:
+        await asyncio.to_thread(vector_store_service.initialize_index)
+        await asyncio.to_thread(vector_store_service.warm_up)
+    except Exception as exc:
+        logger.warning("RAG warm-up failed (will retry on first request): %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting up %s v%s", settings.PROJECT_NAME, settings.VERSION)
@@ -49,6 +58,17 @@ async def lifespan(app: FastAPI):
             "PINECONE_API_KEY is not set — RAG profile ingestion/retrieval will return 503 "
             "until a valid key is configured in .env"
         )
+    if not settings.API_KEY:
+        logger.warning(
+            "API_KEY is not set — /ingest/* endpoints accept writes from anyone. "
+            "Set API_KEY before exposing this server publicly."
+        )
+
+    # Prepare the Pinecone index and embedding model in the background so the first
+    # RAG request doesn't pay for it, without delaying startup or the event loop.
+    warmup_task = None
+    if settings.PINECONE_API_KEY:
+        warmup_task = asyncio.create_task(_warm_up_rag(), name="rag_warmup")
 
     worker_task = None
     try:
@@ -60,6 +80,8 @@ async def lifespan(app: FastAPI):
     yield  # Application is running
 
     logger.info("Shutting down %s", settings.PROJECT_NAME)
+    if warmup_task and not warmup_task.done():
+        warmup_task.cancel()
     if worker_task:
         worker_task.cancel()
         try:
@@ -102,7 +124,9 @@ cors_origins = (
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_credentials=True,
+    # Credentials with a wildcard origin is invalid per the CORS spec, so only
+    # allow them when specific origins are listed.
+    allow_credentials=cors_origins != ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

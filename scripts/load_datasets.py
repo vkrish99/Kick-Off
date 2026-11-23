@@ -25,7 +25,6 @@ Usage:
 
 import argparse
 import asyncio
-import os
 import random
 import sys
 from datetime import datetime, timezone
@@ -34,11 +33,19 @@ from pathlib import Path
 # Fix Windows console encoding for emoji/unicode
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-import httpx
-import pandas as pd
+import httpx  # noqa: E402
+import pandas as pd  # noqa: E402
 
 
-BASE_URL = "http://localhost:8000"
+import os  # noqa: E402
+
+from dotenv import load_dotenv  # noqa: E402
+
+load_dotenv()
+
+# Point at a deployed server with PITCHMASTER_URL; API_KEY (from .env) is sent on writes.
+BASE_URL = os.environ.get("PITCHMASTER_URL", "http://localhost:8000").rstrip("/")
+HEADERS = {"X-API-Key": os.environ["API_KEY"]} if os.environ.get("API_KEY") else {}
 
 # Paths relative to project root
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -89,7 +96,7 @@ def load_tm_profiles() -> pd.DataFrame:
     if not path.exists():
         print(f"  ⚠️  Transfermarkt profiles not found at {path}")
         return pd.DataFrame()
-    print(f"  📂  Loading transfermarkt profiles ...")
+    print("  📂  Loading transfermarkt profiles ...")
     df = pd.read_csv(path, low_memory=False)
     print(f"       → {len(df):,} TM profiles loaded")
     return df
@@ -100,7 +107,7 @@ def load_injuries() -> pd.DataFrame:
     path = TM_DIR / "player_injuries" / "player_injuries.csv"
     if not path.exists():
         return pd.DataFrame()
-    print(f"  📂  Loading injury records ...")
+    print("  📂  Loading injury records ...")
     df = pd.read_csv(path, low_memory=False)
     print(f"       → {len(df):,} injury records loaded")
     return df
@@ -342,11 +349,6 @@ def generate_telemetry_from_appearances(
         df = df[df["current_club_name"].str.lower().str.contains(search, na=False)]
 
     df = df.head(limit)
-    player_ids = set(df["player_id"].values)
-
-    # Get recent appearances for these players
-    recent = appearances_df[appearances_df["player_id"].isin(player_ids)]
-
     pitch_zones = {
         "Goalkeeper": (5, 34),
         "Defender": (25, 34),
@@ -406,7 +408,7 @@ async def ingest_profiles_batch(
                     f"ingested {count} profiles ({total_ingested}/{total} total)"
                 )
             elif r.status_code == 503:
-                print(f"    ⚠️   API keys not configured — skipping (503)")
+                print("    ⚠️   API keys not configured — skipping (503)")
                 return total_ingested
             else:
                 print(f"    ❌  Batch {batch_num} failed [{r.status_code}]: {r.text[:200]}")
@@ -448,7 +450,7 @@ async def run_analysis(client: httpx.AsyncClient, query: str, telemetry: list[di
                 print(f"  {line}")
             print(f"{'-'*60}")
         elif r.status_code == 503:
-            print(f"  ⚠️   LLM API key not configured")
+            print("  ⚠️   LLM API key not configured")
         else:
             print(f"  ❌  [{r.status_code}]: {r.text[:300]}")
     except Exception as e:
@@ -460,7 +462,7 @@ async def run_analysis(client: httpx.AsyncClient, query: str, telemetry: list[di
 # ---------------------------------------------------------------------------
 async def main(no_ai: bool, team: str, limit: int) -> None:
     print(f"\n{'='*60}")
-    print(f"  ⚽  PitchMaster AI — Real Dataset Loader")
+    print("  ⚽  PitchMaster AI — Real Dataset Loader")
     if team:
         print(f"  Team filter: {team}")
     print(f"  Player limit: {limit or 'ALL'}")
@@ -468,16 +470,15 @@ async def main(no_ai: bool, team: str, limit: int) -> None:
 
     # --- Load datasets ---
     print(f"\n{'='*60}")
-    print(f"  📊  Loading datasets ...")
+    print("  📊  Loading datasets ...")
     print(f"{'='*60}\n")
 
     players_df = load_kaggle_players()
     appearances_df = load_kaggle_appearances()
-    valuations_df = load_valuations()
     injuries_df = load_injuries()
 
     # --- Aggregate stats ---
-    print(f"\n  ⚙️   Aggregating player statistics ...")
+    print("\n  ⚙️   Aggregating player statistics ...")
     appearances_agg = aggregate_appearances(appearances_df)
     injuries_agg = aggregate_injuries(injuries_df)
     print(f"       → Stats computed for {len(appearances_agg):,} players")
@@ -487,7 +488,7 @@ async def main(no_ai: bool, team: str, limit: int) -> None:
 
     # --- Build profiles ---
     print(f"\n{'='*60}")
-    print(f"  🏗️   Building player profiles ...")
+    print("  🏗️   Building player profiles ...")
     print(f"{'='*60}\n")
 
     profiles = build_profiles(
@@ -497,7 +498,7 @@ async def main(no_ai: bool, team: str, limit: int) -> None:
     print(f"\n  📋  Built {len(profiles)} player profiles")
 
     # Show sample
-    print(f"\n  Sample profiles:")
+    print("\n  Sample profiles:")
     for p in profiles[:5]:
         print(f"    ▸ {p['name']:<30} ({p['position']}) — {p['team']}")
 
@@ -508,14 +509,14 @@ async def main(no_ai: bool, team: str, limit: int) -> None:
     print(f"\n  📡  Generated {len(telemetry)} telemetry records\n")
 
     # --- Connect to server ---
-    async with httpx.AsyncClient(base_url=BASE_URL) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=HEADERS) as client:
         # Health check
         try:
             r = await client.get("/health", timeout=5)
             print(f"  🏥  Server: {r.json()['status'].upper()} (v{r.json()['version']})\n")
         except Exception:
             print(f"\n  ❌  Cannot reach server at {BASE_URL}")
-            print(f"      Start with: python -m uvicorn app.main:app --reload")
+            print("      Start with: python -m uvicorn app.main:app --reload")
             sys.exit(1)
 
         # --- Ingest profiles ---
@@ -545,7 +546,7 @@ async def main(no_ai: bool, team: str, limit: int) -> None:
         # --- Demo analysis queries ---
         if not no_ai:
             print(f"\n{'='*60}")
-            print(f"  🧠  Running analysis queries ...")
+            print("  🧠  Running analysis queries ...")
             print(f"{'='*60}")
 
             queries = [
@@ -558,7 +559,7 @@ async def main(no_ai: bool, team: str, limit: int) -> None:
                 print()
 
     print(f"\n{'='*60}")
-    print(f"  ✅  Done! Open http://localhost:8000/docs to explore the API.")
+    print("  ✅  Done! Open http://localhost:8000/docs to explore the API.")
     print(f"{'='*60}\n")
 
 

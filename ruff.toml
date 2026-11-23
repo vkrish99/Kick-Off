@@ -1,0 +1,7 @@
+# Lint for real errors only (pyflakes + syntax/statement checks). Pinned here so
+# CI doesn't depend on whatever ruff defaults or user-level config are in effect.
+target-version = "py312"
+extend-exclude = ["football-datasets-main", "kaggle_football"]
+
+[lint]
+select = ["E4", "E7", "E9", "F"]

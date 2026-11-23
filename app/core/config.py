@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # CORS — comma-separated list of allowed origins (default: allow all)
     CORS_ORIGINS: str = "*"
 
+    # API key required (as the X-API-Key header) on write endpoints (/ingest/*).
+    # Leave unset only for local development; always set it on a public deployment.
+    API_KEY: Optional[str] = None
+
     # Structured logging — set to "true" to emit JSON logs (recommended for production)
     LOG_JSON: bool = False
 
@@ -54,13 +58,23 @@ class Settings(BaseSettings):
     PINECONE_REGION: str = "us-east-1"
     PINECONE_METRIC: str = "cosine"
 
-    # Embedding model (sentence-transformers, runs locally)
-    EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
+    # Embedding model (fastembed/ONNX, runs locally without torch). Produces the same
+    # vectors as the sentence-transformers model of the same name.
+    EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
     EMBEDDING_DIM: int = 384               # must match EMBEDDING_MODEL_NAME
 
     # API security
     MAX_QUERY_LENGTH: int = 2000           # characters — mirrors security.py
     MAX_TELEMETRY_BATCH: int = 50          # items per /ingest/telemetry request
+
+    # API-Football (api-sports.io) — player injury/availability sync
+    API_FOOTBALL_KEY: Optional[str] = None
+    API_FOOTBALL_BASE_URL: str = "https://v3.football.api-sports.io"
+    API_FOOTBALL_LEAGUES: str = "39"        # comma-separated league ids (39 = Premier League)
+    API_FOOTBALL_SEASON: int = 2025         # season start year; free plans may restrict this
+    API_FOOTBALL_CACHE_TTL: int = 6 * 3600  # seconds a raw API response is reused
+    PLAYER_STATUS_TTL: int = 36 * 3600      # seconds a synced status stays valid
+    PLAYER_STATUS_STALE_DAYS: int = 10      # injury rows older than this are ignored
 
     # Pitch dimensions — single source of truth (metres)
     PITCH_LENGTH_M: float = 105.0

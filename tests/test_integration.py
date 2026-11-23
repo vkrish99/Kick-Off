@@ -11,7 +11,6 @@ These tests complement the unit tests in test_agents.py / test_api.py by
 validating that the complete HTTP → schema → service → response path works
 correctly, including the new Pydantic bounds and the /config endpoint.
 """
-import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, MagicMock, patch
 
