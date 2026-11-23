@@ -72,6 +72,26 @@ Each run uses one request per league, and responses are cached for 6 hours. The 
 
 Schedule it once a day (cron or Windows Task Scheduler) to keep statuses current; they expire after 36 hours if the sync stops running.
 
+## Deploying to AWS (free tier)
+
+The app runs on a single free-tier EC2 instance (1 GB RAM) with
+[`docker-compose.prod.yml`](docker-compose.prod.yml): the app on port 80 plus Redis, which isn't
+exposed. It uses about 250 MB of RAM.
+
+1. Launch an **Amazon Linux 2023** instance of the free-tier-eligible type (`t3.micro` or
+   `t2.micro`) with a 20 GB disk. Allow inbound **HTTP (80)** from anywhere and **SSH (22)**.
+2. Connect (EC2 Instance Connect in the console works) and run:
+   ```bash
+   sudo dnf install -y git && git clone https://github.com/vkrish99/Kick-Off.git && bash Kick-Off/deploy/ec2-setup.sh
+   ```
+   [`deploy/ec2-setup.sh`](deploy/ec2-setup.sh) adds swap, installs Docker, asks for your Groq and
+   Pinecone keys (saved only in `.env` on the server), generates an `API_KEY` for the write
+   endpoints, builds the image and starts the stack. Re-run it to deploy new commits.
+3. Open `http://<public-ip>/`. To load profiles from your PC, run the seed scripts with
+   `PITCHMASTER_URL=http://<public-ip>` and that `API_KEY` in your local `.env`.
+
+Set an AWS budget alert, and stop the instance when you're not demoing it.
+
 ## Testing
 
 Run the test suite:
