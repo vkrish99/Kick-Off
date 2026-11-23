@@ -5,7 +5,6 @@ All external I/O (Redis, OpenAI, Pinecone) is mocked.
 from fastapi.testclient import TestClient
 from app.main import app
 from unittest.mock import AsyncMock, MagicMock, patch
-import pytest
 
 client = TestClient(app)
 
@@ -52,7 +51,7 @@ def test_ingest_telemetry(mock_enqueue):
 # ---------------------------------------------------------------------------
 @patch("app.agents.orchestrator.orchestrator.process_query", new_callable=AsyncMock)
 def test_analyze_query(mock_process):
-    mock_process.return_value = ("This is a tactical insight.", "TACTICAL")
+    mock_process.return_value = ("This is a tactical insight.", "TACTICAL", [])
     payload = {"query": "How is player p1 performing?"}
     response = client.post("/api/v1/analyze", json=payload)
     assert response.status_code == 200

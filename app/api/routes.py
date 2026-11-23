@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.models.schemas import (
@@ -9,8 +9,9 @@ from app.models.schemas import (
 )
 from app.services.cache import redis_service
 from app.services.rag import rag_service
+from app.services import player_status
 from app.agents.orchestrator import orchestrator
-from app.core.security import sanitize_query
+from app.core.security import require_api_key, sanitize_query
 from app.core.config import get_settings
 from typing import List
 import logging
@@ -27,7 +28,12 @@ limiter = Limiter(key_func=get_remote_address)
 # ---------------------------------------------------------------------------
 # Telemetry Ingestion
 # ---------------------------------------------------------------------------
-@api_router.post("/ingest/telemetry", status_code=202, tags=["Ingestion"])
+@api_router.post(
+    "/ingest/telemetry",
+    status_code=202,
+    tags=["Ingestion"],
+    dependencies=[Depends(require_api_key)],
+)
 @limiter.limit("60/minute")
 async def ingest_telemetry(
     request: Request,
@@ -53,14 +59,22 @@ async def ingest_telemetry(
 # ---------------------------------------------------------------------------
 # Player Profile Ingestion
 # ---------------------------------------------------------------------------
-@api_router.post("/ingest/profiles", status_code=201, tags=["Ingestion"])
-async def ingest_profiles(profiles: List[PlayerProfile]):
+@api_router.post(
+    "/ingest/profiles",
+    status_code=201,
+    tags=["Ingestion"],
+    dependencies=[Depends(require_api_key)],
+)
+@limiter.limit("30/minute")
+async def ingest_profiles(request: Request, profiles: List[PlayerProfile]):
     """
     Ingest player profiles into Pinecone vector store for RAG retrieval.
     """
     try:
         count = await rag_service.ingest_profiles(profiles)
         return {"status": "ingested", "count": count}
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("Failed to ingest profiles: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -115,18 +129,44 @@ async def analyze_query(request: Request, payload: AnalysisRequest):
             if payload.telemetry_context
             else None
         )
-        insight, route = await orchestrator.process_query(
+        insight, route, sources = await orchestrator.process_query(
             query=payload.query,
             telemetry_context=telemetry_context,
             news_context=payload.news_context,
             filters=payload.filters,
         )
-        return AnalysisResponse(insight=insight, route_used=route)
+        return AnalysisResponse(insight=insight, route_used=route, sources=sources)
     except HTTPException:
         raise
     except Exception as exc:
         logger.error("Analysis failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error.")
+
+
+# ---------------------------------------------------------------------------
+# Player Availability (synced from API-Football by scripts/sync_player_status.py)
+# ---------------------------------------------------------------------------
+@api_router.get("/players/unavailable", tags=["Players"])
+async def unavailable_players(team: str | None = None):
+    """Players flagged as out or doubtful by the latest availability sync."""
+    try:
+        return await player_status.list_unavailable(team)
+    except Exception as exc:
+        logger.error("Failed to list player statuses: %s", exc, exc_info=True)
+        raise HTTPException(status_code=503, detail="Status store temporarily unavailable.")
+
+
+@api_router.get("/players/{player_id}/status", tags=["Players"])
+async def get_player_status(player_id: str):
+    """
+    Current availability for one player: `out`, `doubtful`, `available`
+    (synced and not flagged), or `unknown` (no sync has run yet).
+    """
+    try:
+        return await player_status.get_status(player_id)
+    except Exception as exc:
+        logger.error("Failed to read player status: %s", exc, exc_info=True)
+        raise HTTPException(status_code=503, detail="Status store temporarily unavailable.")
 
 
 # ---------------------------------------------------------------------------

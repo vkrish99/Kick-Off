@@ -9,12 +9,20 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Download the embedding model at build time so containers start ready and
+# never fetch it at runtime. fastembed runs it on ONNX Runtime (no torch).
+ENV FASTEMBED_CACHE_PATH=/opt/models
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/all-MiniLM-L6-v2')"
+
 
 FROM python:3.12-slim
 WORKDIR /app
 
 COPY --from=builder /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+COPY --from=builder /opt/models /opt/models
+ENV PATH="/opt/venv/bin:$PATH" \
+    FASTEMBED_CACHE_PATH=/opt/models \
+    PYTHONUNBUFFERED=1
 
 COPY app/ app/
 COPY scripts/ scripts/
@@ -23,5 +31,8 @@ RUN useradd --create-home appuser
 USER appuser
 
 EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

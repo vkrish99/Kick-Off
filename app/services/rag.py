@@ -1,22 +1,29 @@
-from typing import List, Optional
-from app.services.vector_store import vector_store_service
-from app.models.schemas import PlayerProfile
-from app.core.config import get_settings
-from langchain_core.documents import Document
+import asyncio
 import logging
+from typing import List, Optional
+
+from langchain_core.documents import Document
+
+from app.core.config import get_settings
+from app.models.schemas import PlayerProfile
+from app.services.vector_store import vector_store_service
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
 class RAGService:
-    def __init__(self):
-        pass
+    """
+    Player-profile retrieval over Pinecone.
+
+    Embedding and the Pinecone SDK are synchronous and CPU/network-bound, so every
+    call into the vector store runs in a worker thread to keep the event loop free.
+    """
 
     async def ingest_profiles(self, profiles: List[PlayerProfile]) -> int:
         """Embed player profiles and upsert them into Pinecone."""
-        # Ensure the Pinecone index exists
-        vector_store_service.initialize_index()
+        # Ensure the Pinecone index exists (checked once per process)
+        await asyncio.to_thread(vector_store_service.initialize_index)
 
         documents = []
         for p in profiles:
@@ -28,7 +35,7 @@ class RAGService:
             metadata = p.model_dump()
             documents.append(Document(page_content=content, metadata=metadata))
 
-        vector_store_service.add_documents(documents)
+        await asyncio.to_thread(vector_store_service.add_documents, documents)
         logger.info("RAG ingested %d player profiles.", len(documents))
         return len(documents)
 
@@ -45,9 +52,7 @@ class RAGService:
         if filters:
             search_kwargs["filter"] = filters
         retriever = vector_store_service.as_retriever(search_kwargs=search_kwargs)
-        docs = retriever.invoke(query)
-        return docs
+        return await asyncio.to_thread(retriever.invoke, query)
 
 
 rag_service = RAGService()
-

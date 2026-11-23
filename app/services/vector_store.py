@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import logging
+import threading
+import uuid
 from typing import List, Optional
 
+import numpy as np
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
@@ -46,8 +49,10 @@ class PineconeRetriever(BaseRetriever):
         )
         docs = []
         for match in results.get("matches", []):
-            content = match.get("metadata", {}).get("content", "")
-            metadata = match.get("metadata", {})
+            metadata = dict(match.get("metadata") or {})
+            content = metadata.get("content", "")
+            if match.get("score") is not None:
+                metadata["score"] = match.get("score")
             docs.append(Document(page_content=content, metadata=metadata))
         return docs
 
@@ -60,6 +65,8 @@ class VectorStoreService:
         self._pc: Optional[Pinecone] = None
         self._embedder = None
         self._index = None
+        self._index_ready = False
+        self._lock = threading.Lock()  # these methods run in worker threads
 
     # ------------------------------------------------------------------
     # Lazy helpers
@@ -76,12 +83,17 @@ class VectorStoreService:
         return self._pc
 
     def _get_embedder(self):
-        """Lazy-load sentence-transformers model (runs locally, free)."""
-        if self._embedder is None:
-            from sentence_transformers import SentenceTransformer
-            logger.info("Loading embedding model: %s ...", settings.EMBEDDING_MODEL_NAME)
-            self._embedder = SentenceTransformer(settings.EMBEDDING_MODEL_NAME)
-            logger.info("Embedding model loaded.")
+        """Lazy-load the fastembed (ONNX) model. Runs locally, no torch needed.
+
+        The model is downloaded to FASTEMBED_CACHE_PATH on first use; the Docker
+        image downloads it at build time.
+        """
+        with self._lock:
+            if self._embedder is None:
+                from fastembed import TextEmbedding
+                logger.info("Loading embedding model: %s ...", settings.EMBEDDING_MODEL_NAME)
+                self._embedder = TextEmbedding(settings.EMBEDDING_MODEL_NAME)
+                logger.info("Embedding model loaded.")
         return self._embedder
 
     def _get_index(self):
@@ -91,22 +103,29 @@ class VectorStoreService:
         return self._index
 
     def _embed(self, text: str) -> List[float]:
-        """Generate embedding using local sentence-transformers (free)."""
-        model = self._get_embedder()
-        embedding = model.encode(text, normalize_embeddings=True)
-        return embedding.tolist()
+        """Embed one text (CPU-bound: call it from a worker thread in async code)."""
+        return self._embed_batch([text])[0]
 
     def _embed_batch(self, texts: List[str]) -> List[List[float]]:
-        """Batch embed for efficiency."""
+        """Batch embed, L2-normalized to match the cosine index."""
         model = self._get_embedder()
-        embeddings = model.encode(texts, normalize_embeddings=True, batch_size=32)
-        return [e.tolist() for e in embeddings]
+        vectors = []
+        for e in model.embed(texts, batch_size=32):
+            norm = float(np.linalg.norm(e)) or 1.0
+            vectors.append((e / norm).tolist())
+        return vectors
+
+    def warm_up(self) -> None:
+        """Load the embedding model ahead of the first request."""
+        self._embed("warm-up")
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
     def initialize_index(self):
-        """Ensure the Pinecone index exists (idempotent)."""
+        """Ensure the Pinecone index exists. Checks Pinecone only once per process."""
+        if self._index_ready:
+            return
         pc = self._get_pinecone()
         existing = [idx.name for idx in pc.list_indexes()]
         if settings.PINECONE_INDEX_NAME not in existing:
@@ -127,6 +146,7 @@ class VectorStoreService:
             )
         else:
             logger.info("Pinecone index '%s' already exists.", settings.PINECONE_INDEX_NAME)
+        self._index_ready = True
 
     def add_documents(self, documents: List[Document]) -> None:
         """Embed and upsert documents into Pinecone."""
@@ -137,10 +157,11 @@ class VectorStoreService:
         embeddings = self._embed_batch(texts)
 
         vectors = []
-        for i, (doc, embedding) in enumerate(zip(documents, embeddings)):
+        for doc, embedding in zip(documents, embeddings):
             meta = {**doc.metadata, "content": doc.page_content}
-            # Use player_id as deterministic ID if available
-            vec_id = doc.metadata.get("player_id", f"doc-{i}")
+            # player_id gives a stable ID, so re-ingesting a player updates it in place.
+            # Without one, use a random ID so documents never overwrite each other.
+            vec_id = doc.metadata.get("player_id") or uuid.uuid4().hex
             vectors.append({"id": str(vec_id), "values": embedding, "metadata": meta})
 
         if vectors:

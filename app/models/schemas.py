@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 # ---------------------------------------------------------------------------
 # Telemetry Data Model
@@ -19,7 +19,7 @@ class TelemetryData(BaseModel):
     })
 
     player_id: str = Field(..., min_length=1, max_length=64)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     speed: float = Field(..., ge=0.0, le=120.0)             # km/h (physiological cap)
     distance_covered: float = Field(..., ge=0.0, le=20.0)   # km per session
     heart_rate: int = Field(..., ge=30, le=250)              # bpm
@@ -44,7 +44,7 @@ class MatchEvent(BaseModel):
     player_id: str
     minute: int = Field(..., ge=0, le=120)  # 0-90 regular + extra time
     description: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # ---------------------------------------------------------------------------
 # News / Sentiment Data
@@ -148,15 +148,50 @@ class AnalysisRequest(BaseModel):
     telemetry_context: Optional[List[TelemetryData]] = None
     news_context: Optional[str] = None
 
+class Source(BaseModel):
+    """A player profile the RAG answer was built from."""
+    player_id: Optional[str] = None
+    name: Optional[str] = None
+    score: Optional[float] = None       # Pinecone similarity score
+
+
 class AnalysisResponse(BaseModel):
     model_config = ConfigDict(json_schema_extra={
         "example": {
             "insight": "Haaland's fatigue index of 0.88 is above the critical threshold. Recommend substitution before the 80th minute.",
             "route_used": "TACTICAL",
             "related_metrics": None,
+            "sources": [],
         }
     })
 
     insight: str
     related_metrics: Optional[dict] = None
     route_used: Optional[str] = None   # surfaces which agent handled the query
+    sources: List[Source] = Field(default_factory=list)  # filled for RAG answers
+
+# ---------------------------------------------------------------------------
+# Player Availability  (synced from API-Football)
+# ---------------------------------------------------------------------------
+class PlayerStatus(BaseModel):
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "player_id": "418560",
+            "api_football_id": 1100,
+            "name": "E. Haaland",
+            "team": "Manchester City",
+            "status": "out",
+            "reason": "Ankle Injury",
+            "fixture_date": "2025-10-04T14:00:00+00:00",
+            "updated_at": "2025-10-03T08:00:00+00:00",
+        }
+    })
+
+    player_id: Optional[str] = None     # Transfermarkt id used across PitchMaster; None if unmatched
+    api_football_id: int
+    name: str
+    team: str
+    status: str                         # "out" (Missing Fixture) or "doubtful" (Questionable)
+    reason: Optional[str] = None
+    fixture_date: Optional[datetime] = None
+    updated_at: datetime

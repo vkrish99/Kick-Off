@@ -26,7 +26,10 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.core.config import get_settings  # noqa: E402
 from app.services.vector_store import vector_store_service  # noqa: E402
+
+settings = get_settings()
 
 
 def sample_indexed_profiles(sample_size: int) -> list[dict]:
@@ -46,7 +49,7 @@ def sample_indexed_profiles(sample_size: int) -> list[dict]:
             "Pinecone index is empty — run `python scripts/load_datasets.py` first."
         )
 
-    dim = vector_store_service._get_embedder().get_sentence_embedding_dimension()
+    dim = settings.EMBEDDING_DIM
     seen: dict[str, dict] = {}
     attempts = 0
     max_attempts = sample_size * 5

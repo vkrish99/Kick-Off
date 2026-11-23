@@ -25,7 +25,7 @@ class TestOrchestratorRouting:
         mock_tactical.analyze = AsyncMock(return_value="Tactical insight: player spacing is good.")
         orchestrator._classify_route = _mock_router("TACTICAL")
 
-        insight, route = await orchestrator.process_query(
+        insight, route, _ = await orchestrator.process_query(
             query="What is the player spacing like?",
             telemetry_context=[{"player_id": "haaland_9", "speed": 22.0}],
         )
@@ -38,7 +38,7 @@ class TestOrchestratorRouting:
     async def test_tactical_falls_back_to_general_without_telemetry(self, mock_tactical, orchestrator):
         orchestrator._classify_route = _mock_router("TACTICAL")
 
-        insight, route = await orchestrator.process_query(
+        insight, route, _ = await orchestrator.process_query(
             query="What is the player spacing like?",
             telemetry_context=None,
         )
@@ -53,7 +53,7 @@ class TestOrchestratorRouting:
         mock_formation.advise = AsyncMock(return_value="Switch to 4-3-3.")
         orchestrator._classify_route = _mock_router("FORMATION")
 
-        insight, route = await orchestrator.process_query(
+        insight, route, _ = await orchestrator.process_query(
             query="What formation should we use?",
             telemetry_context=[{"player_id": "p1", "fatigue_index": 0.8}],
         )
@@ -67,7 +67,7 @@ class TestOrchestratorRouting:
         mock_sentiment.analyze_sentiment = AsyncMock(return_value="Player morale is high.")
         orchestrator._classify_route = _mock_router("SENTIMENT")
 
-        insight, route = await orchestrator.process_query(
+        insight, route, _ = await orchestrator.process_query(
             query="How is the team morale?",
             news_context="Star player returned from injury and is fit.",
         )
@@ -83,7 +83,7 @@ class TestOrchestratorRouting:
     async def test_sentiment_falls_back_to_general_without_news(self, mock_sentiment, orchestrator):
         orchestrator._classify_route = _mock_router("SENTIMENT")
 
-        insight, route = await orchestrator.process_query(
+        insight, route, _ = await orchestrator.process_query(
             query="How is the morale?",
             news_context=None,
         )
@@ -96,7 +96,7 @@ class TestOrchestratorRouting:
     async def test_general_fallback_returns_query_in_response(self, orchestrator):
         orchestrator._classify_route = _mock_router("GENERAL")
 
-        insight, route = await orchestrator.process_query(query="Hello there!")
+        insight, route, _ = await orchestrator.process_query(query="Hello there!")
 
         assert route == "GENERAL"
         assert "Hello there!" in insight
@@ -117,9 +117,9 @@ class TestOrchestratorRouting:
         mock_chain = MagicMock()
         mock_chain.ainvoke = AsyncMock(return_value="RAG answer about Haaland")
 
-        with patch("app.agents.orchestrator.ChatGroq") as mock_groq_cls, \
+        with patch("app.agents.orchestrator.ChatGroq"), \
              patch("app.agents.orchestrator.ChatPromptTemplate") as mock_cpt, \
-             patch("app.agents.orchestrator.StrOutputParser") as mock_parser:
+             patch("app.agents.orchestrator.StrOutputParser"):
 
             # Build: prompt | llm | parser  →  mock_chain
             mock_template = MagicMock()
@@ -128,7 +128,7 @@ class TestOrchestratorRouting:
             mock_template.__or__ = MagicMock(return_value=mock_intermediate)
             mock_intermediate.__or__ = MagicMock(return_value=mock_chain)
 
-            insight, route = await orchestrator.process_query(
+            insight, route, _ = await orchestrator.process_query(
                 query="What are Haaland's key stats?",
             )
 

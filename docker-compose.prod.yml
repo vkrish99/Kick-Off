@@ -1,0 +1,39 @@
+# Production stack for a single small server (e.g. an AWS free-tier EC2 instance with 1 GB RAM).
+# App + Redis only; InfluxDB is optional and left out. Redis is not exposed outside Docker.
+#
+# The app image is built separately (deploy/ec2-setup.sh runs `docker build -t kick-off:latest .`),
+# so this file only needs the Docker Compose plugin, not buildx.
+#
+#   docker compose -f docker-compose.prod.yml up -d
+services:
+  app:
+    image: kick-off:latest
+    pull_policy: never
+    restart: unless-stopped
+    ports:
+      - "80:8000"
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - LOG_JSON=true
+    depends_on:
+      redis:
+        condition: service_healthy
+    mem_limit: 700m
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    mem_limit: 128m
+
+volumes:
+  redis_data:
